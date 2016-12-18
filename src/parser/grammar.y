@@ -411,7 +411,7 @@ timeseries_statement:
 			if ($5.type != (SDB_TYPE_ARRAY | SDB_TYPE_STRING)) {
 				sdb_parser_yyerrorf(&yylloc, scanner, YY_("syntax error, "
 						"unexpected array of type %s; expected STRING"),
-						SDB_TYPE_TO_STRING($5.type));
+						SDB_TYPE_TO_STRING($5.type & 0xff));
 				sdb_data_free_datum(&$5);
 				free($2);
 				free($4);
