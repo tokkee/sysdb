@@ -31,8 +31,12 @@
 
 #include "sysdb.h"
 #include "core/timeseries.h"
+#include "utils/error.h"
 #include "utils/strings.h"
 
+#include <assert.h>
+
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -100,6 +104,64 @@ sdb_timeseries_create(size_t data_names_len, const char * const *data_names,
 	ts->data_len = data_len;
 	return ts;
 } /* sdb_timeseries_create */
+
+static void
+swap_strings(char **s, size_t i, size_t j)
+{
+	char *tmp = s[i];
+	s[i] = s[j];
+	s[j] = tmp;
+} /* swap_strings */
+
+static void
+swap_values(sdb_data_point_t **s, size_t i, size_t j)
+{
+	sdb_data_point_t *tmp = s[i];
+	s[i] = s[j];
+	s[j] = tmp;
+} /* swap_values */
+
+int
+sdb_timeseries_filter(sdb_timeseries_t *ts,
+		size_t data_names_len, const char * const *data_names)
+{
+	size_t i, j;
+
+	for (i = 0; i < data_names_len; i++) {
+		bool found = false;
+
+		for (j = i; j < ts->data_names_len; j++) {
+			if (strcmp(data_names[i], ts->data_names[j]))
+				continue;
+
+			found = true;
+
+			if (i == j)
+				break;
+
+			/* move things into the right place */
+			swap_strings(ts->data_names, i, j);
+			swap_values(ts->data, i, j);
+			break;
+		}
+
+		if (!found) {
+			sdb_log(SDB_LOG_ERR, "Requested data-source '%s' not found",
+					data_names[i]);
+			return -1;
+		}
+	}
+
+	/* now drop everything else */
+	for (i = data_names_len; i < ts->data_names_len; i++) {
+		free(ts->data[i]);
+		ts->data[i] = NULL;
+		free(ts->data_names[i]);
+		ts->data_names[i] = NULL;
+	}
+	ts->data_names_len = data_names_len;
+	return 0;
+} /* sdb_timeseries_filter */
 
 void
 sdb_timeseries_destroy(sdb_timeseries_t *ts)

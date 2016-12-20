@@ -30,9 +30,12 @@
 #endif
 
 #include "core/timeseries.h"
+#include "core/data.h"
 #include "testutils.h"
 
 #include <check.h>
+
+#include <stdbool.h>
 
 #define TS "1970-01-01 00:00:00 +0000"
 #define V "0.000000"
@@ -77,11 +80,281 @@ START_TEST(timeseries)
 }
 END_TEST
 
+static struct {
+	size_t initial_len;
+	char **initial_names;
+	size_t len;
+	char **names;
+	bool want_err;
+} timeseries_filter_data[] = {
+	/* simple combinations */
+	{
+		0, NULL,
+		0, NULL,
+		false,
+	},
+	{
+		1, (char *[]){ "a" },
+		0, NULL,
+		false,
+	},
+	{
+		1, (char *[]){ "a" },
+		1, (char *[]){ "a" },
+		false,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		0, NULL,
+		false,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		1, (char *[]){ "a" },
+		false,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		1, (char *[]){ "b" },
+		false,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "b", "a" },
+		false,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "a", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		0, NULL,
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		1, (char *[]){ "a" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		1, (char *[]){ "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		1, (char *[]){ "c" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "a", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "b", "a" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "b", "c" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "c", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "a", "c" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "c", "a" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "a", "b", "c" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "c", "a", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "b", "c", "a" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "c", "b", "a" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "a", "c", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		3, (char *[]){ "b", "a", "c" },
+		false,
+	},
+	/* duplicates: these don't make sense but we want no crashes */
+	{
+		3, (char *[]){ "a", "a", "b" },
+		3, (char *[]){ "a", "a", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "a", "b", "a" },
+		3, (char *[]){ "a", "a", "b" },
+		false,
+	},
+	{
+		3, (char *[]){ "b", "a", "a" },
+		3, (char *[]){ "a", "a", "b" },
+		false,
+	},
+	/* errors */
+	{
+		0, NULL,
+		1, (char *[]){ "a" },
+		true,
+	},
+	{
+		1, (char *[]){ "a" },
+		1, (char *[]){ "b" },
+		true,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "a", "c" },
+		true,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "c", "b" },
+		true,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "a", "a" },
+		true,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		2, (char *[]){ "b", "b" },
+		true,
+	},
+	{
+		2, (char *[]){ "a", "b" },
+		3, (char *[]){ "a", "b", "c" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "a", "a" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "b", "b" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "c", "c" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "a", "d" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		2, (char *[]){ "d", "a" },
+		true,
+	},
+	{
+		3, (char *[]){ "a", "b", "c" },
+		1, (char *[]){ "d" },
+		true,
+	},
+};
+
+START_TEST(test_timeseries_filter)
+{
+	sdb_timeseries_t *ts;
+	int status;
+	size_t i;
+
+	char initial[1024], want[1024], have[1024];
+
+	sdb_data_format(&(sdb_data_t){
+				SDB_TYPE_STRING | SDB_TYPE_ARRAY,
+				{ .array = {
+					timeseries_filter_data[_i].initial_len,
+					timeseries_filter_data[_i].initial_names,
+				} },
+			}, initial, sizeof(initial), SDB_UNQUOTED);
+	sdb_data_format(&(sdb_data_t){
+				SDB_TYPE_STRING | SDB_TYPE_ARRAY,
+				{ .array = {
+					timeseries_filter_data[_i].len,
+					timeseries_filter_data[_i].names,
+				} },
+			}, want, sizeof(want), SDB_UNQUOTED);
+
+	ts = sdb_timeseries_create(
+			timeseries_filter_data[_i].initial_len,
+			(const char * const *)timeseries_filter_data[_i].initial_names, 42);
+	ck_assert(ts != NULL);
+
+	status = sdb_timeseries_filter(ts,
+			timeseries_filter_data[_i].len,
+			(const char * const *)timeseries_filter_data[_i].names);
+
+	sdb_data_format(&(sdb_data_t){
+				SDB_TYPE_STRING | SDB_TYPE_ARRAY,
+				{ .array = { ts->data_names_len, ts->data_names } },
+			}, have, sizeof(have), SDB_UNQUOTED);
+
+	if ((status < 0) != timeseries_filter_data[_i].want_err)
+		fail("sdb_timeseries_filter(ts<names=%s>, %s) = %d, names=%s; want <ERR=%d>",
+				initial, want, status, have, timeseries_filter_data[_i].want_err);
+
+	if (! timeseries_filter_data[_i].want_err) {
+		for (i = 0; i < timeseries_filter_data[_i].len; i++)
+			fail_unless(strcmp(ts->data_names[i], timeseries_filter_data[_i].names[i]) == 0,
+					"sdb_timeseries_filter(ts<names=%s>, %s) => names=%s; want: names=%s "
+					"(differs at index=%zu)", initial, want, have, want, i);
+
+		for ( ; i < timeseries_filter_data[_i].initial_len; i++)
+			fail_unless(ts->data_names[i] == NULL,
+					"sdb_timeseries_filter(ts<names=%s>, %s) => index %zu not reset",
+					initial, want, i);
+	}
+
+	sdb_timeseries_destroy(ts);
+}
+END_TEST
+
 TEST_MAIN("core::timeseries")
 {
 	TCase *tc = tcase_create("core");
 	tcase_add_test(tc, timeseries_info);
 	tcase_add_test(tc, timeseries);
+	TC_ADD_LOOP_TEST(tc, timeseries_filter);
 	ADD_TCASE(tc);
 }
 TEST_MAIN_END

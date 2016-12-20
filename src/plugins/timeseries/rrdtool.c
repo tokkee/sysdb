@@ -182,7 +182,7 @@ copy_data(sdb_timeseries_t *ts, rrd_value_t *data, time_t step,
 		}
 	}
 
-	/* check if any wanted data-sources is missing */
+	/* check if any wanted data-source is missing */
 	for (i = 0; i < ts->data_names_len; i++) {
 		bool found = false;
 
