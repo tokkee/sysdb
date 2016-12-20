@@ -1634,6 +1634,13 @@ sdb_plugin_fetch_timeseries(const char *type, const char *id,
 	old_ctx = ctx_set(fetcher->ts_ctx);
 	ts = fetcher->impl.fetch(id, opts, fetcher->ts_user_data);
 	ctx_set(old_ctx);
+
+	if (opts->data_names_len && ts) {
+		if (sdb_timeseries_filter(ts, opts->data_names_len, opts->data_names)) {
+			sdb_timeseries_destroy(ts);
+			return NULL;
+		}
+	}
 	return ts;
 } /* sdb_plugin_fetch_timeseries */
 
